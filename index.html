@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
+  <meta name="theme-color" id="tc" content="#000000"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Orbit"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <title>Orbit</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+    html,body,#root{height:100%;height:100dvh;overflow:hidden}
+    body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#000}
+    input,button,textarea,select{font-family:inherit}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+    input[type=number]{-moz-appearance:textfield}
+    ::-webkit-scrollbar{display:none}
+    @keyframes popIn{0%{transform:scale(.9);opacity:0}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+    #inst{display:none;position:fixed;bottom:80px;left:16px;right:16px;padding:15px;border-radius:18px;font-weight:700;font-size:15px;border:none;cursor:pointer;z-index:9999;animation:fadeUp .4s ease}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<button id="inst" onclick="doInstall()">⊕ Install Orbit — Works Offline</button>
+<script>
+  let _dp;
+  window.addEventListener('beforeinstallprompt',e=>{
+    e.preventDefault();_dp=e;
+    const b=document.getElementById('inst');
+    b.style.display='block';
+    b.style.background=document.body.style.background==='rgb(0,0,0)'?'#fff':'#000';
+    b.style.color=document.body.style.background==='rgb(0,0,0)'?'#000':'#fff';
+  });
+  window.addEventListener('appinstalled',()=>{document.getElementById('inst').style.display='none';});
+  function doInstall(){if(_dp){_dp.prompt();_dp.userChoice.then(()=>{_dp=null;document.getElementById('inst').style.display='none';});}}
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useEffect,useRef,useMemo,useCallback,createContext,useContext} = React;
+
+
+const ThemeCtx = createContext({ dark: false, toggle: () => {} });
+
+const LIGHT = {
+  bg: "#F2F2F7", bg2: "#FFFFFF", bg3: "#E5E5EA",
+  label: "#000000", label2: "rgba(60,60,67,.6)", label3: "rgba(60,60,67,.3)",
+  sep: "rgba(60,60,67,.15)", glass: "rgba(255,255,255,.85)",
+  shadow: "0 2px 16px rgba(0,0,0,.08)", shadowHeavy: "0 8px 32px rgba(0,0,0,.12)",
+};
+const DARK = {
+  bg: "#000000", bg2: "#1C1C1E", bg3: "#2C2C2E",
+  label: "#FFFFFF", label2: "rgba(235,235,245,.6)", label3: "rgba(235,235,245,.3)",
+  sep: "rgba(84,84,88,.6)", glass: "rgba(28,28,30,.85)",
+  shadow: "0 2px 16px rgba(0,0,0,.4)", shadowHeavy: "0 8px 32px rgba(0,0,0,.6)",
+};
+
+const RC = {
+  finance: { s: "#30D158", bg: "rgba(48,209,88,.15)", dk: "rgba(48,209,88,.08)" },
+  health:  { s: "#FF375F", bg: "rgba(255,55,95,.15)",  dk: "rgba(255,55,95,.08)"  },
+  mind:    { s: "#35C0F6", bg: "rgba(53,192,246,.15)", dk: "rgba(53,192,246,.08)" },
+  connect: { s: "#FF6AD5", bg: "rgba(255,106,213,.15)",dk: "rgba(255,106,213,.08)"},
+  growth:  { s: "#FF9F0A", bg: "rgba(255,159,10,.15)", dk: "rgba(255,159,10,.08)" },
+  custom:  { s: "#BF5AF2", bg: "rgba(191,90,242,.15)", dk: "rgba(191,90,242,.08)" },
+};
+
+const CAT_META = {
+  finance:{label:"Finance",icon:"💰"},health:{label:"Health",icon:"🏃"},
+  mind:{label:"Mind",icon:"🧠"},connect:{label:"Connect",icon:"❤️"},
+  growth:{label:"Growth",icon:"🌱"},custom:{label:"Custom",icon:"⭐"},
+};
+
+const EXPENSE_CATS = [
+  {id:"rent",label:"Rent",icon:"🏠",col:"#FF9F0A",group:"Housing"},
+  {id:"electricity",label:"Electricity / NEPA",icon:"⚡",col:"#FF9F0A",group:"Housing"},
+  {id:"generator",label:"Generator / Fuel",icon:"⛽",col:"#FF9F0A",group:"Housing"},
+  {id:"internet",label:"Internet / WiFi",icon:"📡",col:"#FF9F0A",group:"Housing"},
+  {id:"transport",label:"Transport / Fare",icon:"🚌",col:"#35C0F6",group:"Transport"},
+  {id:"fuel",label:"Fuel",icon:"⛽",col:"#35C0F6",group:"Transport"},
+  {id:"car_repairs",label:"Car Repairs",icon:"🔩",col:"#35C0F6",group:"Transport"},
+  {id:"ride_hailing",label:"Uber / Bolt",icon:"🛻",col:"#35C0F6",group:"Transport"},
+  {id:"groceries",label:"Groceries",icon:"🛒",col:"#FF6AD5",group:"Food"},
+  {id:"eating_out",label:"Eating Out",icon:"🍽️",col:"#FF6AD5",group:"Food"},
+  {id:"market",label:"Market / Foodstuff",icon:"🌽",col:"#FF6AD5",group:"Food"},
+  {id:"family",label:"Family Support",icon:"👨‍👩‍👧",col:"#FF375F",group:"Family"},
+  {id:"dependents",label:"Dependents",icon:"👶",col:"#FF375F",group:"Family"},
+  {id:"school_fees",label:"School Fees",icon:"🎒",col:"#FF375F",group:"Family"},
+  {id:"gifts",label:"Gifts & Support",icon:"🎁",col:"#FF375F",group:"Family"},
+  {id:"wedding",label:"Aso-ebi / Weddings",icon:"💍",col:"#FF375F",group:"Family"},
+  {id:"partner",label:"Partner / Spouse",icon:"❤️",col:"#FF375F",group:"Family"},
+  {id:"clothing",label:"Clothing & Fashion",icon:"👕",col:"#BF5AF2",group:"Personal"},
+  {id:"beauty",label:"Beauty & Grooming",icon:"💅",col:"#BF5AF2",group:"Personal"},
+  {id:"data",label:"Data & Airtime",icon:"📱",col:"#BF5AF2",group:"Personal"},
+  {id:"health_med",label:"Health & Medicine",icon:"💊",col:"#BF5AF2",group:"Personal"},
+  {id:"fitness",label:"Gym & Fitness",icon:"🏋️",col:"#BF5AF2",group:"Personal"},
+  {id:"tithe",label:"Tithe",icon:"⛪",col:"#FF9F0A",group:"Faith & Giving"},
+  {id:"offerings",label:"Offerings",icon:"🙏",col:"#FF9F0A",group:"Faith & Giving"},
+  {id:"charity",label:"Charity / Zakat",icon:"🤲",col:"#FF9F0A",group:"Faith & Giving"},
+  {id:"levies",label:"Community Levies",icon:"🤝",col:"#FF9F0A",group:"Faith & Giving"},
+  {id:"savings",label:"Savings",icon:"🔒",col:"#30D158",group:"Savings"},
+  {id:"emergency",label:"Emergency Fund",icon:"🛡️",col:"#30D158",group:"Savings"},
+  {id:"investment",label:"Investment",icon:"📊",col:"#30D158",group:"Savings"},
+  {id:"pension",label:"Pension / NHF",icon:"🏛️",col:"#30D158",group:"Savings"},
+  {id:"loan_repay",label:"Loan Repayment",icon:"💳",col:"#FF375F",group:"Debt"},
+  {id:"bnpl",label:"Buy Now Pay Later",icon:"🛍️",col:"#FF375F",group:"Debt"},
+  {id:"entertainment",label:"Entertainment",icon:"🎉",col:"#35C0F6",group:"Entertainment"},
+  {id:"streaming",label:"Streaming / DSTV",icon:"📺",col:"#35C0F6",group:"Entertainment"},
+  {id:"travel",label:"Travel",icon:"✈️",col:"#35C0F6",group:"Entertainment"},
+  {id:"subscriptions",label:"Subscriptions",icon:"🔄",col:"#35C0F6",group:"Entertainment"},
+  {id:"misc",label:"Miscellaneous",icon:"🎲",col:"#8E8E93",group:"Other"},
+  {id:"car_insurance",label:"Car Insurance",icon:"🚗",col:"#35C0F6",group:"Transport"},
+  {id:"stationery",label:"Stationery & Books",icon:"📚",col:"#8E8E93",group:"Other"},
+  {id:"taxes",label:"Taxes / Levies",icon:"📋",col:"#8E8E93",group:"Other"},
+];
+
+// ── RING SVG ────────────────────────────────────────────────
+function ConcentricRings({ goals, size = 240, animated = true }) {
+  const active = goals.filter(g => g.active !== false).slice(0, 5);
+  if (!active.length) return (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: "rgba(128,128,128,.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <span style={{ fontSize: 40 }}>⊙</span>
+    </div>
+  );
+  const sw = 13, gap = 5;
+  const outerR = size / 2 - sw - 2;
+  const radii = active.map((_, i) => outerR - i * (sw + gap));
+  const center = size / 2;
+  const totalPct = active.reduce((s, g) => s + Math.min(g.progress / g.target * 100, 100), 0) / active.length;
+
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        {active.map((goal, i) => {
+          const r = radii[i];
+          const circ = 2 * Math.PI * r;
+          const pct = Math.min(goal.progress / goal.target * 100, 100);
+          const offset = circ - pct / 100 * circ;
+          const col = RC[goal.category]?.s || RC.custom.s;
+          const tipAngle = (-90 + pct / 100 * 360) * Math.PI / 180;
+          const tx = center + r * Math.cos(tipAngle);
+          const ty = center + r * Math.sin(tipAngle);
+          return (
+            <g key={goal.id}>
+              <circle cx={center} cy={center} r={r} fill="none" stroke={col} strokeOpacity=".18" strokeWidth={sw} />
+              <circle cx={center} cy={center} r={r} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round"
+                strokeDasharray={circ} strokeDashoffset={animated ? offset : circ}
+                transform={`rotate(-90 ${center} ${center})`}
+                style={{ transition: `stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1) ${i * .12}s`, filter: `drop-shadow(0 0 6px ${col}77)` }} />
+              {pct > 2 && pct < 99.5 && <circle cx={tx} cy={ty} r={sw * .38} fill={col} style={{ filter: `drop-shadow(0 0 4px ${col})` }} />}
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+        <div style={{ fontFamily: "system-ui", fontWeight: 700, fontSize: size * .14, lineHeight: 1, letterSpacing: "-.02em" }}>{Math.round(totalPct)}%</div>
+        <div style={{ fontSize: size * .055, opacity: .45, marginTop: 3 }}>complete</div>
+      </div>
+    </div>
+  );
+}
+
+// ── ONBOARDING ──────────────────────────────────────────────
+const PROFILES = [
+  { id: "salary", label: "Salary", icon: "💼", sub: "Fixed monthly income" },
+  { id: "corper", label: "NYSC Corper", icon: "🎖️", sub: "₦33k allawee + extras" },
+  { id: "freelancer", label: "Freelancer", icon: "💻", sub: "Variable income" },
+  { id: "student", label: "Student", icon: "🎓", sub: "Allowance based" },
+  { id: "business", label: "Business", icon: "🛒", sub: "Running your own thing" },
+  { id: "homemaker", label: "Homemaker", icon: "🏡", sub: "Home is your domain" },
+];
+const CITIES = ["Lagos", "Abuja", "Port Harcourt", "Ibadan", "Kano", "Enugu", "Other"];
+const FOCUS = [
+  { id: "finance", icon: "💰", label: "Finance", desc: "Budget, savings, debt" },
+  { id: "health", icon: "🏃", label: "Health", desc: "Fitness & wellness" },
+  { id: "mind", icon: "🧠", label: "Mind", desc: "Learning & clarity" },
+  { id: "connect", icon: "❤️", label: "Connect", desc: "People & relationships" },
+  { id: "growth", icon: "🌱", label: "Growth", desc: "Career & skills" },
+];
+
+function Onboarding({ onComplete }) {
+  const { dark, T } = useContext(ThemeCtx);
+  const [step, setStep] = useState(0);
+  const [d, setD] = useState({ name: "", gender: "", focus: [], income: "", profile: "", city: "" });
+  const [building, setBuilding] = useState(false);
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+
+  const valid = [
+    d.name.trim().length >= 2 && !!d.gender,
+    d.focus.length >= 1,
+    !d.focus.includes("finance") || parseInt(d.income.replace(/,/g, "")) >= 500,
+    !!d.profile,
+    !!d.city,
+  ];
+
+  const next = () => {
+    if (step === 4) {
+      setBuilding(true);
+      setTimeout(() => {
+        const profile = { ...d, income: parseInt(d.income.replace(/,/g, "")) || 50000 };
+        const goals = buildGoals(profile);
+        const budget = buildBudget(profile);
+        onComplete(profile, goals, budget);
+      }, 1800);
+      return;
+    }
+    if (step === 1 && !d.focus.includes("finance")) { setStep(3); return; }
+    setStep(s => s + 1);
+  };
+  const back = () => {
+    if (step === 3 && !d.focus.includes("finance")) { setStep(1); return; }
+    setStep(s => Math.max(0, s - 1));
+  };
+
+  const inp = { width: "100%", padding: "14px 16px", borderRadius: 14, border: `1.5px solid ${T.sep}`, background: T.bg3, color: T.label, fontSize: 16, fontFamily: "inherit", fontWeight: 600, outline: "none" };
+
+  if (building) return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: dark ? "#000" : "#F2F2F7", gap: 20, padding: 32, textAlign: "center" }}>
+      <ConcentricRings goals={[
+        { id: 1, category: "finance", progress: 75, target: 100, active: true },
+        { id: 2, category: "health", progress: 55, target: 100, active: true },
+        { id: 3, category: "mind", progress: 40, target: 100, active: true },
+      ]} size={200} animated />
+      <div style={{ fontWeight: 800, fontSize: 22, color: T.label, letterSpacing: "-.02em" }}>Building your orbit...</div>
+      <div style={{ fontSize: 15, color: T.label2 }}>Personalising for {d.name.split(" ")[0]} 🎯</div>
+    </div>
+  );
+
+  const steps = [
+    <div key="0">
+      <div style={{ fontSize: 44, marginBottom: 12 }}>👋</div>
+      <div style={{ fontWeight: 800, fontSize: 28, color: T.label, letterSpacing: "-.03em", lineHeight: 1.2, marginBottom: 8 }}>What should we call you?</div>
+      <div style={{ fontSize: 15, color: T.label2, marginBottom: 24, lineHeight: 1.6 }}>Orbit works best when it knows you.</div>
+      <input value={d.name} onChange={e => set("name", e.target.value)} placeholder="Your name" autoFocus
+        style={{ ...inp, fontSize: 22, fontWeight: 700, marginBottom: 20, borderColor: d.name.trim().length >= 2 ? RC.finance.s : T.sep }} />
+      <div style={{ fontSize: 12, color: T.label3, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 12, fontWeight: 600 }}>Gender</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {[{ id: "male", icon: "🧔", label: "Male" }, { id: "female", icon: "👩", label: "Female" }].map(g => (
+          <button key={g.id} onClick={() => set("gender", g.id)}
+            style={{ padding: "20px 16px", borderRadius: 18, border: `2px solid ${d.gender === g.id ? RC.finance.s : T.sep}`, background: d.gender === g.id ? RC.finance.bg : T.bg2, cursor: "pointer", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>{g.icon}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: T.label }}>{g.label}</div>
+          </button>
+        ))}
+      </div>
+    </div>,
+
+    <div key="1">
+      <div style={{ fontSize: 44, marginBottom: 12 }}>◎</div>
+      <div style={{ fontWeight: 800, fontSize: 28, color: T.label, letterSpacing: "-.03em", lineHeight: 1.2, marginBottom: 8 }}>What are you working on?</div>
+      <div style={{ fontSize: 15, color: T.label2, marginBottom: 24 }}>Pick what matters. These become your rings.</div>
+      {FOCUS.map((f, i) => {
+        const sel = d.focus.includes(f.id);
+        const col = RC[f.id];
+        return (
+          <button key={f.id} onClick={() => set("focus", sel ? d.focus.filter(x => x !== f.id) : [...d.focus, f.id])}
+            style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", padding: "15px 16px", borderRadius: 18, border: `2px solid ${sel ? col.s : T.sep}`, background: sel ? col.bg : T.bg2, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>
+            <div style={{ width: 42, height: 42, borderRadius: 13, background: sel ? col.s : T.bg3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{f.icon}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: T.label }}>{f.label}</div>
+              <div style={{ fontSize: 12, color: T.label2, marginTop: 2 }}>{f.desc}</div>
+            </div>
+            <div style={{ width: 22, height: 22, borderRadius: 99, background: sel ? col.s : T.bg3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 700 }}>{sel ? "✓" : ""}</div>
+          </button>
+        );
+      })}
+    </div>,
+
+    <div key="2">
+      <div style={{ fontSize: 44, marginBottom: 12 }}>💵</div>
+      <div style={{ fontWeight: 800, fontSize: 28, color: T.label, letterSpacing: "-.03em", lineHeight: 1.2, marginBottom: 8 }}>Monthly income?</div>
+      <div style={{ fontSize: 15, color: T.label2, marginBottom: 24, lineHeight: 1.6 }}>Honest numbers → better budget.</div>
+      <div style={{ position: "relative", marginBottom: 16 }}>
+        <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 22, fontWeight: 700, color: RC.finance.s }}>₦</span>
+        <input value={d.income} type="tel" inputMode="numeric" placeholder="0"
+          onChange={e => { const r = e.target.value.replace(/\D/g, ""); set("income", r ? parseInt(r).toLocaleString() : ""); }}
+          style={{ ...inp, paddingLeft: 50, fontSize: 26, fontWeight: 800, borderColor: parseInt(d.income.replace(/,/g, "")) >= 500 ? RC.finance.s : T.sep }} />
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {[33000, 50000, 80000, 120000, 200000, 300000].map(a => (
+          <button key={a} onClick={() => set("income", a.toLocaleString())}
+            style={{ padding: "8px 14px", borderRadius: 99, border: `1.5px solid ${d.income === a.toLocaleString() ? RC.finance.s : T.sep}`, background: d.income === a.toLocaleString() ? RC.finance.bg : T.bg2, fontSize: 13, fontWeight: 600, color: d.income === a.toLocaleString() ? RC.finance.s : T.label2, cursor: "pointer" }}>
+            ₦{a.toLocaleString()}
+          </button>
+        ))}
+      </div>
+    </div>,
+
+    <div key="3">
+      <div style={{ fontSize: 44, marginBottom: 12 }}>💼</div>
+      <div style={{ fontWeight: 800, fontSize: 28, color: T.label, letterSpacing: "-.03em", lineHeight: 1.2, marginBottom: 8 }}>Your situation?</div>
+      <div style={{ fontSize: 15, color: T.label2, marginBottom: 20 }}>We'll tailor your suggestions.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {PROFILES.map(p => (
+          <button key={p.id} onClick={() => set("profile", p.id)}
+            style={{ padding: "16px 14px", borderRadius: 18, border: `2px solid ${d.profile === p.id ? RC.growth.s : T.sep}`, background: d.profile === p.id ? RC.growth.bg : T.bg2, cursor: "pointer", textAlign: "left" }}>
+            <div style={{ fontSize: 26, marginBottom: 8 }}>{p.icon}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: T.label }}>{p.label}</div>
+            <div style={{ fontSize: 11, color: T.label2, marginTop: 3 }}>{p.sub}</div>
+          </button>
+        ))}
+      </div>
+    </div>,
+
+    <div key="4">
+      <div style={{ fontSize: 44, marginBottom: 12 }}>📍</div>
+      <div style={{ fontWeight: 800, fontSize: 28, color: T.label, letterSpacing: "-.03em", lineHeight: 1.2, marginBottom: 8 }}>Where are you based?</div>
+      <div style={{ fontSize: 15, color: T.label2, marginBottom: 20 }}>Cost of living shapes your orbit.</div>
+      <div style={{ background: T.bg2, borderRadius: 20, overflow: "hidden", boxShadow: T.shadow }}>
+        {CITIES.map((city, i) => (
+          <button key={city} onClick={() => set("city", city)}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "16px 18px", background: d.city === city ? RC.connect.bg : T.bg2, border: "none", borderBottom: i < CITIES.length - 1 ? `1px solid ${T.sep}` : "none", cursor: "pointer", textAlign: "left" }}>
+            <span style={{ fontWeight: 600, fontSize: 16, color: T.label }}>{city}</span>
+            {d.city === city && <span style={{ color: RC.connect.s, fontWeight: 700, fontSize: 18 }}>✓</span>}
+          </button>
+        ))}
+      </div>
+    </div>,
+  ];
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: dark ? "#000" : "#F2F2F7" }}>
+      <div style={{ padding: "16px 20px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <button onClick={back} style={{ background: "none", border: "none", color: step > 0 ? RC.mind.s : "transparent", fontSize: 14, fontWeight: 600, cursor: "pointer", padding: "4px 0" }}>← Back</button>
+          <span style={{ fontSize: 13, color: T.label3, fontWeight: 500 }}>{step + 1} / 5</span>
+        </div>
+        <div style={{ height: 4, background: T.bg3, borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: "100%", borderRadius: 99, background: `linear-gradient(90deg,${RC.finance.s},${RC.health.s},${RC.mind.s})`, width: `${((step + 1) / 5) * 100}%`, transition: "width .4s cubic-bezier(.4,0,.2,1)" }} />
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 20px 16px" }}>{steps[step]}</div>
+      <div style={{ padding: "12px 20px 20px" }}>
+        <button onClick={next} disabled={!valid[step]}
+          style={{ width: "100%", padding: "16px", borderRadius: 20, background: valid[step] ? "#000" : T.bg3, color: valid[step] ? "#fff" : T.label3, border: "none", fontSize: 17, fontWeight: 700, cursor: valid[step] ? "pointer" : "default", transition: "all .2s", boxShadow: valid[step] ? "0 4px 24px rgba(0,0,0,.25)" : "none" }}>
+          {step === 4 ? "Start my orbit →" : "Continue →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── BUILDERS ────────────────────────────────────────────────
+function buildGoals(profile) {
+  let id = 1;
+  const goals = [];
+  const m = profile.gender === "male";
+  if (profile.focus.includes("finance")) {
+    goals.push({ id: id++, category: "finance", icon: "🔒", label: "Monthly Savings", target: Math.round(profile.income * .15 / 500) * 500, progress: 0, unit: "₦" });
+    goals.push({ id: id++, category: "finance", icon: "💳", label: "Debt Clearance", target: 100, progress: 0, unit: "%" });
+  }
+  if (profile.focus.includes("health")) {
+    goals.push({ id: id++, category: "health", icon: "🏃", label: m ? "Workout sessions" : "Exercise sessions", target: 12, progress: 0, unit: "/month" });
+    goals.push({ id: id++, category: "health", icon: "💧", label: "Daily Water", target: 30, progress: 0, unit: "days" });
+  }
+  if (profile.focus.includes("mind")) {
+    goals.push({ id: id++, category: "mind", icon: "📚", label: "Read / Learn", target: 8, progress: 0, unit: "sessions" });
+    goals.push({ id: id++, category: "mind", icon: "🧘", label: "Mindful days", target: 15, progress: 0, unit: "days" });
+  }
+  if (profile.focus.includes("connect")) {
+    goals.push({ id: id++, category: "connect", icon: "☎️", label: "Call family", target: 8, progress: 0, unit: "calls" });
+    goals.push({ id: id++, category: "connect", icon: "🤝", label: "Quality time", target: 4, progress: 0, unit: "occasions" });
+  }
+  if (profile.focus.includes("growth")) {
+    goals.push({ id: id++, category: "growth", icon: "🛠️", label: "Skill hours", target: 10, progress: 0, unit: "hrs" });
+    goals.push({ id: id++, category: "growth", icon: "📝", label: "Applications", target: 4, progress: 0, unit: "sent" });
+  }
+  return goals;
+}
+
+function buildBudget(profile) {
+  const inc = profile.income;
+  const m = profile.gender === "male";
+  return [
+    { id: "b1", catId: "savings", label: "Savings", icon: "🔒", col: "#30D158", amt: Math.round(inc * .15 / 500) * 500 },
+    { id: "b2", catId: "transport", label: "Transport", icon: "🚌", col: "#35C0F6", amt: Math.round(inc * .18 / 500) * 500 },
+    { id: "b3", catId: "groceries", label: "Groceries / Food", icon: "🛒", col: "#FF6AD5", amt: Math.round(inc * .20 / 500) * 500 },
+    { id: "b4", catId: "family", label: "Family Support", icon: "👨‍👩‍👧", col: "#FF375F", amt: Math.round(inc * .10 / 500) * 500 },
+    { id: "b5", catId: "data", label: "Data & Airtime", icon: "📱", col: "#BF5AF2", amt: Math.round(inc * .05 / 500) * 500 },
+    { id: "b6", catId: m ? "entertainment" : "beauty", label: m ? "Entertainment" : "Beauty & Grooming", icon: m ? "🎉" : "💅", col: "#35C0F6", amt: Math.round(inc * .08 / 500) * 500 },
+    { id: "b7", catId: "tithe", label: "Tithe", icon: "⛪", col: "#FF9F0A", amt: Math.round(inc * .10 / 500) * 500 },
+    { id: "b8", catId: "emergency", label: "Emergency Fund", icon: "🛡️", col: "#30D158", amt: Math.round(inc * .07 / 500) * 500 },
+    { id: "b9", catId: "misc", label: "Miscellaneous", icon: "🎲", col: "#8E8E93", amt: Math.round(inc * .05 / 500) * 500 },
+  ];
+}
+
+// ── MAIN DASHBOARD ──────────────────────────────────────────
+function Dashboard({ profile, goals: initGoals, budget: initBudget }) {
+  const { dark, toggle, T } = useContext(ThemeCtx);
+  const [tab, setTab] = useState("today");
+  const [goals, setGoals] = useState(initGoals);
+  const [budget, setBudget] = useState(initBudget);
+  const [incomeSources, setIncomeSources] = useState([
+    { id: "inc_1", label: PROFILES.find(p => p.id === profile.profile)?.label || "Primary Income", icon: "💼", amount: profile.income }
+  ]);
+  const [loaded, setLoaded] = useState(false);
+  const [sheet, setSheet] = useState(null);
+  const [addGoalSheet, setAddGoalSheet] = useState(false);
+  const [addExpSheet, setAddExpSheet] = useState(false);
+  const [addIncSheet, setAddIncSheet] = useState(false);
+  const [expSearch, setExpSearch] = useState("");
+  const [selCat, setSelCat] = useState(null);
+  const [newExpAmt, setNewExpAmt] = useState("");
+  const [newGoal, setNewGoal] = useState({ label: "", category: "finance", icon: "🎯", target: "", unit: "" });
+  const [newIncLabel, setNewIncLabel] = useState("");
+  const [newIncAmt, setNewIncAmt] = useState("");
+  const [burstId, setBurstId] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => { setTimeout(() => setLoaded(true), 80); }, []);
+
+  const fname = profile.name.split(" ")[0];
+  const pct = g => Math.min(g.progress / g.target * 100, 100);
+  const active = goals.filter(g => g.active !== false);
+  const totalIncome = incomeSources.reduce((s, x) => s + x.amount, 0);
+  const totalExp = budget.reduce((s, b) => s + b.amt, 0);
+  const remaining = totalIncome - totalExp;
+  const over = totalExp > totalIncome;
+
+  const logProgress = (id, delta) => {
+    setGoals(prev => {
+      const g = prev.find(x => x.id === id);
+      if (!g) return prev;
+      const np = Math.min(Math.max(0, g.progress + delta), g.target);
+      if (g.progress < g.target && np >= g.target) { setBurstId(id); setTimeout(() => setBurstId(null), 2000); }
+      return prev.map(x => x.id === id ? { ...x, progress: np } : x);
+    });
+  };
+
+  const filteredCats = useMemo(() => {
+    if (!expSearch.trim()) return EXPENSE_CATS;
+    const q = expSearch.toLowerCase();
+    return EXPENSE_CATS.filter(c => c.label.toLowerCase().includes(q) || c.group.toLowerCase().includes(q));
+  }, [expSearch]);
+
+  const grouped = useMemo(() => {
+    const g = {};
+    EXPENSE_CATS.forEach(c => { (g[c.group] = g[c.group] || []).push(c); });
+    return g;
+  }, []);
+
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? "Good morning," : hr < 17 ? "Good afternoon," : "Good evening,";
+  const card = (extra = {}) => ({ background: T.bg2, borderRadius: 22, padding: 18, boxShadow: T.shadow, marginBottom: 14, ...extra });
+  const sTitle = txt => <div style={{ fontWeight: 800, fontSize: 18, color: T.label, letterSpacing: "-.02em", marginBottom: 12 }}>{txt}</div>;
+
+  // ── TODAY ─
+  function TodayTab() {
+    return (
+      <div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 14, color: T.label2, fontWeight: 500 }}>{greet}</div>
+          <div style={{ fontWeight: 800, fontSize: 32, color: T.label, letterSpacing: "-.03em", lineHeight: 1.15 }}>{fname}.</div>
+        </div>
+        <div style={{ ...card(), background: dark ? "#1C1C1E" : "#fff", padding: "28px 20px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden", boxShadow: T.shadowHeavy }}>
+          <div style={{ position: "absolute", inset: 0, background: dark ? "radial-gradient(ellipse at 50% 0%,rgba(48,209,88,.07) 0%,transparent 60%)" : "radial-gradient(ellipse at 50% 0%,rgba(48,209,88,.05) 0%,transparent 60%)" }} />
+          <ConcentricRings goals={active} size={210} animated={loaded} />
+          <div style={{ marginTop: 18, display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>
+            {active.slice(0, 5).map(g => (
+              <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 7, height: 7, borderRadius: 99, background: RC[g.category]?.s || RC.custom.s }} />
+                <span style={{ fontSize: 11, color: T.label2, fontWeight: 500 }}>{g.icon} {g.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {sTitle("Quick Log")}
+        {active.map((g, i) => {
+          const col = RC[g.category]?.s || RC.custom.s;
+          const p = pct(g);
+          return (
+            <div key={g.id} onClick={() => setSheet(g)}
+              style={{ ...card({ marginBottom: 10, cursor: "pointer", border: `1.5px solid ${burstId === g.id ? col + "88" : T.sep}`, position: "relative", overflow: "hidden" }) }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: RC[g.category]?.bg || "rgba(128,128,128,.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{g.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: T.label, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                    {g.label}
+                    {g.progress >= g.target && <span style={{ fontSize: 11, background: col + "22", color: col, padding: "2px 6px", borderRadius: 99, fontWeight: 700 }}>✓ Done</span>}
+                  </div>
+                  <div style={{ height: 4, background: T.bg3, borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 99, background: col, width: loaded ? `${p}%` : "0%", transition: "width .6s cubic-bezier(.4,0,.2,1)", boxShadow: `0 0 6px ${col}88` }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: T.label3, marginTop: 4 }}>{g.progress} / {g.target} {g.unit}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button onClick={e => { e.stopPropagation(); logProgress(g.id, -1); }} style={{ width: 34, height: 34, borderRadius: 10, background: T.bg3, border: "none", color: T.label, fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                  <button onClick={e => { e.stopPropagation(); logProgress(g.id, 1); }} style={{ width: 34, height: 34, borderRadius: 10, background: col, border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 10px ${col}66` }}>+</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={() => setAddGoalSheet(true)} style={{ width: "100%", padding: "13px", borderRadius: 16, background: T.bg2, border: `1.5px dashed ${T.sep}`, color: T.label2, fontWeight: 600, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          ⊕ Add a goal
+        </button>
+      </div>
+    );
+  }
+
+  // ── FINANCE ─
+  function FinanceTab() {
+    const inp = { width: "100%", padding: "13px 16px", borderRadius: 14, border: `1.5px solid ${T.sep}`, background: T.bg3, color: T.label, fontSize: 15, fontFamily: "inherit", fontWeight: 600, outline: "none" };
+
+    return (
+      <div>
+        {/* Summary */}
+        <div style={{ ...card(), boxShadow: T.shadowHeavy }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 11, color: T.label2, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Total Income</div>
+              <div style={{ fontWeight: 800, fontSize: 30, color: RC.finance.s, letterSpacing: "-.03em" }}>₦{totalIncome.toLocaleString()}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: T.label2, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 4 }}>Remaining</div>
+              <div style={{ fontWeight: 800, fontSize: 22, color: over ? RC.health.s : remaining === 0 ? T.label3 : RC.finance.s, letterSpacing: "-.02em" }}>₦{remaining.toLocaleString()}</div>
+            </div>
+          </div>
+          <div style={{ height: 8, background: T.bg3, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>
+            <div style={{ height: "100%", borderRadius: 99, background: over ? `linear-gradient(90deg,${RC.health.s},${RC.connect.s})` : `linear-gradient(90deg,${RC.finance.s},${RC.mind.s})`, width: `${Math.min(totalExp / Math.max(totalIncome, 1) * 100, 100)}%`, transition: "width .8s" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600 }}>
+            <span style={{ color: RC.health.s }}>₦{totalExp.toLocaleString()} budgeted</span>
+            <span style={{ color: over ? RC.health.s : T.label3 }}>{over ? `Over by ₦${(totalExp - totalIncome).toLocaleString()}` : `${Math.round(totalExp / Math.max(totalIncome, 1) * 100)}% allocated`}</span>
+          </div>
+        </div>
+
+        {sTitle("Income Sources")}
+        <div style={{ background: T.bg2, borderRadius: 22, overflow: "hidden", boxShadow: T.shadow, marginBottom: 12 }}>
+          {incomeSources.map((src, i) => (
+            <div key={src.id} style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: i < incomeSources.length - 1 ? `1px solid ${T.sep}` : "none" }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: RC.finance.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{src.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: T.label }}>{src.label}</div>
+                <div style={{ fontSize: 12, color: T.label2, marginTop: 2 }}>Monthly</div>
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: RC.finance.s }}>₦{src.amount.toLocaleString()}</div>
+              {incomeSources.length > 1 && <button onClick={() => setIncomeSources(p => p.filter(x => x.id !== src.id))} style={{ background: "none", border: "none", color: T.label3, fontSize: 20, cursor: "pointer" }}>×</button>}
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setAddIncSheet(true)} style={{ width: "100%", padding: "12px", borderRadius: 14, background: T.bg2, border: `1.5px dashed ${T.sep}`, color: T.label2, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+          ⊕ Add income source
+        </button>
+
+        {sTitle("Expenses")}
+        <div style={{ background: T.bg2, borderRadius: 22, overflow: "hidden", boxShadow: T.shadow, marginBottom: 12 }}>
+          {budget.map((item, i) => {
+            const isExp = expanded === item.id;
+            return (
+              <div key={item.id} style={{ borderBottom: i < budget.length - 1 ? `1px solid ${T.sep}` : "none" }}>
+                <div onClick={() => setExpanded(isExp ? null : item.id)} style={{ padding: "13px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: item.col + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{item.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: T.label, marginBottom: 5 }}>{item.label}</div>
+                    <div style={{ height: 4, background: T.bg3, borderRadius: 99, overflow: "hidden" }}>
+                      <div style={{ height: "100%", borderRadius: 99, background: item.col, width: `${Math.min(item.amt / Math.max(totalIncome, 1) * 100, 100)}%` }} />
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: item.col, minWidth: 74, textAlign: "right" }}>₦{item.amt.toLocaleString()}</div>
+                  <span style={{ color: T.label3, fontSize: 11, transform: isExp ? "rotate(180deg)" : "rotate(0)", transition: "transform .2s" }}>▾</span>
+                </div>
+                {isExp && (
+                  <div style={{ padding: "0 16px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                      <button onClick={() => setBudget(p => p.map(x => x.id === item.id ? { ...x, amt: Math.max(0, x.amt - 1000) } : x))} style={{ width: 46, height: 46, borderRadius: 14, background: T.bg3, border: "none", color: T.label, fontSize: 22, cursor: "pointer", fontWeight: 700 }}>−</button>
+                      <input type="number" value={item.amt} onChange={e => setBudget(p => p.map(x => x.id === item.id ? { ...x, amt: parseInt(e.target.value) || 0 } : x))}
+                        style={{ background: "transparent", border: "none", outline: "none", fontSize: 26, fontWeight: 800, color: item.col, textAlign: "center", width: 140 }} />
+                      <button onClick={() => setBudget(p => p.map(x => x.id === item.id ? { ...x, amt: x.amt + 1000 } : x))} style={{ width: 46, height: 46, borderRadius: 14, background: item.col, border: "none", color: "#fff", fontSize: 22, cursor: "pointer", fontWeight: 700, boxShadow: `0 2px 12px ${item.col}44` }}>+</button>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                      {[500, 1000, 2000, 5000, 10000].map(s => (
+                        <div key={s} style={{ display: "flex", gap: 4 }}>
+                          <button onClick={() => setBudget(p => p.map(x => x.id === item.id ? { ...x, amt: Math.max(0, x.amt - s) } : x))} style={{ padding: "6px 9px", borderRadius: 8, background: dark ? RC.health.dk : RC.health.bg, border: "none", color: RC.health.s, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>-{s >= 1000 ? s / 1000 + "k" : s}</button>
+                          <button onClick={() => setBudget(p => p.map(x => x.id === item.id ? { ...x, amt: x.amt + s } : x))} style={{ padding: "6px 9px", borderRadius: 8, background: dark ? RC.finance.dk : RC.finance.bg, border: "none", color: RC.finance.s, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>+{s >= 1000 ? s / 1000 + "k" : s}</button>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setBudget(p => p.filter(x => x.id !== item.id))} style={{ width: "100%", padding: "9px", borderRadius: 10, background: dark ? RC.health.dk : RC.health.bg, border: "none", color: RC.health.s, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Remove</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={() => { setAddExpSheet(true); setTimeout(() => searchRef.current?.focus(), 200); }}
+          style={{ width: "100%", padding: "12px", borderRadius: 14, background: T.bg2, border: `1.5px dashed ${T.sep}`, color: T.label2, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          ⊕ Add expense line
+        </button>
+      </div>
+    );
+  }
+
+  // ── PROFILE ─
+  function ProfileTab() {
+    return (
+      <div>
+        <div style={{ background: "#000", borderRadius: 22, padding: 22, marginBottom: 14, color: "#fff" }}>
+          <div style={{ fontSize: 48, marginBottom: 10 }}>{profile.gender === "female" ? "👩" : "🧔"}</div>
+          <div style={{ fontWeight: 800, fontSize: 26, letterSpacing: "-.03em", marginBottom: 4 }}>{profile.name}</div>
+          <div style={{ fontSize: 13, opacity: .7, marginBottom: 14 }}>{PROFILES.find(p => p.id === profile.profile)?.icon} {PROFILES.find(p => p.id === profile.profile)?.label} · {profile.city}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ padding: "5px 12px", borderRadius: 99, background: "rgba(255,255,255,.15)", fontSize: 12, fontWeight: 600 }}>₦{profile.income.toLocaleString()}/mo</span>
+            {profile.focus.map(f => <span key={f} style={{ padding: "5px 12px", borderRadius: 99, background: RC[f]?.s + "55", fontSize: 12, fontWeight: 600 }}>{CAT_META[f]?.icon} {CAT_META[f]?.label}</span>)}
+          </div>
+        </div>
+        <div style={{ background: T.bg2, borderRadius: 22, overflow: "hidden", boxShadow: T.shadow }}>
+          <div style={{ padding: "15px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${T.sep}` }}>
+            <span style={{ fontWeight: 600, fontSize: 16, color: T.label }}>🌙 Dark Mode</span>
+            <div onClick={toggle} style={{ width: 51, height: 30, borderRadius: 99, background: dark ? RC.mind.s : T.bg3, position: "relative", cursor: "pointer", transition: "background .25s" }}>
+              <div style={{ position: "absolute", top: 3, left: dark ? 23 : 3, width: 24, height: 24, borderRadius: 99, background: "#fff", transition: "left .25s cubic-bezier(.34,1.56,.64,1)", boxShadow: "0 2px 6px rgba(0,0,0,.3)" }} />
+            </div>
+          </div>
+          <div style={{ padding: "15px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${T.sep}` }}>
+            <span style={{ fontWeight: 600, fontSize: 16, color: T.label }}>🎯 Active goals</span>
+            <span style={{ fontWeight: 700, fontSize: 16, color: T.label2 }}>{active.length}</span>
+          </div>
+          <div style={{ padding: "15px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 600, fontSize: 16, color: T.label }}>📊 Orbit score</span>
+            <span style={{ fontWeight: 700, fontSize: 16, color: RC.finance.s }}>{active.length ? Math.round(active.reduce((s, g) => s + pct(g), 0) / active.length) : 0}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: "today", icon: "⊙", label: "Today" },
+    { id: "finance", icon: "₦", label: "Finance" },
+    { id: "profile", icon: "○", label: "Profile" },
+  ];
+  const content = { today: <TodayTab />, finance: <FinanceTab />, profile: <ProfileTab /> };
+
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: T.bg }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px 0" }}>
+        <div style={{ paddingBottom: 76 }}>{content[tab]}</div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ background: T.glass, backdropFilter: "blur(20px)", borderTop: `1px solid ${T.sep}`, display: "flex", padding: "6px 0 8px", flexShrink: 0 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: "8px 0 4px", background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, opacity: tab === t.id ? 1 : .5 }}>
+            <span style={{ fontSize: t.id === "finance" ? 18 : 22, fontWeight: 700, color: tab === t.id ? RC.finance.s : T.label2, lineHeight: 1 }}>{t.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: tab === t.id ? 700 : 500, color: tab === t.id ? RC.finance.s : T.label2 }}>{t.label}</span>
+            {tab === t.id && <div style={{ width: 18, height: 3, borderRadius: 99, background: RC.finance.s }} />}
+          </button>
+        ))}
+      </div>
+
+      {/* Goal detail sheet */}
+      {sheet && (() => {
+        const g = goals.find(x => x.id === sheet.id) || sheet;
+        const col = RC[g.category]?.s || RC.custom.s;
+        const p = pct(g);
+        const circ = 2 * Math.PI * 44;
+        const off = circ - p / 100 * circ;
+        return (
+          <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} onClick={() => setSheet(null)} />
+            <div style={{ position: "relative", background: T.bg2, borderRadius: "26px 26px 0 0", padding: "24px 24px 32px", animation: "popIn .3s cubic-bezier(.34,1.56,.64,1)" }}>
+              <div style={{ width: 40, height: 5, borderRadius: 99, background: T.bg3, margin: "0 auto 22px" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 22 }}>
+                <div style={{ position: "relative", width: 92, height: 92, flexShrink: 0 }}>
+                  <svg width={92} height={92} style={{ position: "absolute", inset: 0 }}>
+                    <circle cx={46} cy={46} r={44} fill="none" stroke={col} strokeOpacity=".15" strokeWidth={10} />
+                    <circle cx={46} cy={46} r={44} fill="none" stroke={col} strokeWidth={10} strokeLinecap="round"
+                      strokeDasharray={circ} strokeDashoffset={off} transform="rotate(-90 46 46)"
+                      style={{ transition: "stroke-dashoffset 1s", filter: `drop-shadow(0 0 5px ${col}88)` }} />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{g.icon}</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 20, color: T.label, letterSpacing: "-.02em" }}>{g.label}</div>
+                  <div style={{ fontSize: 14, color: T.label2, marginTop: 4 }}>{CAT_META[g.category]?.label} · {Math.round(p)}%</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <button onClick={() => logProgress(g.id, -1)} style={{ width: 54, height: 54, borderRadius: 18, background: T.bg3, border: "none", color: T.label, fontSize: 26, cursor: "pointer", fontWeight: 700 }}>−</button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontWeight: 800, fontSize: 42, color: col, lineHeight: 1, letterSpacing: "-.03em" }}>{g.progress}</div>
+                  <div style={{ fontSize: 14, color: T.label3, marginTop: 4 }}>of {g.target} {g.unit}</div>
+                </div>
+                <button onClick={() => logProgress(g.id, 1)} style={{ width: 54, height: 54, borderRadius: 18, background: col, border: "none", color: "#fff", fontSize: 26, cursor: "pointer", fontWeight: 700, boxShadow: `0 4px 20px ${col}55` }}>+</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {[1, 2, 3, 5, 10].map(s => (
+                  <button key={s} onClick={() => logProgress(g.id, s)} style={{ flex: 1, padding: "11px 0", borderRadius: 12, background: col + "22", border: "none", color: col, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>+{s}</button>
+                ))}
+              </div>
+              <button onClick={() => { setGoals(p => p.filter(x => x.id !== g.id)); setSheet(null); }} style={{ width: "100%", padding: "12px", borderRadius: 14, background: dark ? RC.health.dk : RC.health.bg, border: "none", color: RC.health.s, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                Remove goal
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Add goal sheet */}
+      {addGoalSheet && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} onClick={() => setAddGoalSheet(false)} />
+          <div style={{ position: "relative", background: T.bg2, borderRadius: "26px 26px 0 0", padding: "24px 24px 32px", animation: "popIn .3s cubic-bezier(.34,1.56,.64,1)", maxHeight: "80%", overflowY: "auto" }}>
+            <div style={{ width: 40, height: 5, borderRadius: 99, background: T.bg3, margin: "0 auto 20px" }} />
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.label, marginBottom: 18 }}>New Goal</div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: T.label3, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 8 }}>Category</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Object.keys(RC).map(c => {
+                  const sel = newGoal.category === c;
+                  return <button key={c} onClick={() => setNewGoal(p => ({ ...p, category: c }))}
+                    style={{ padding: "7px 14px", borderRadius: 99, border: `2px solid ${sel ? RC[c].s : T.sep}`, background: sel ? RC[c].bg : T.bg2, color: sel ? RC[c].s : T.label2, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+                    {CAT_META[c]?.icon} {CAT_META[c]?.label}
+                  </button>;
+                })}
+              </div>
+            </div>
+            {[["Goal name", "text", "e.g. Save ₦50k, 20 workouts...", "label"], ["Target", "number", "e.g. 20", "target"], ["Unit", "text", "e.g. ₦, sessions, days", "unit"]].map(([lbl, type, ph, key]) => (
+              <div key={key} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: T.label3, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 6 }}>{lbl}</div>
+                <input type={type} placeholder={ph} value={newGoal[key]} onChange={e => setNewGoal(p => ({ ...p, [key]: e.target.value }))}
+                  style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${T.sep}`, background: T.bg3, color: T.label, fontSize: 15, fontFamily: "inherit", fontWeight: 600, outline: "none" }} />
+              </div>
+            ))}
+            <button onClick={() => {
+              if (!newGoal.label || !newGoal.target) return;
+              setGoals(p => [...p, { id: Date.now(), category: newGoal.category, icon: CAT_META[newGoal.category]?.icon || "🎯", label: newGoal.label, target: parseInt(newGoal.target) || 10, progress: 0, unit: newGoal.unit || "", active: true }]);
+              setNewGoal({ label: "", category: "finance", icon: "🎯", target: "", unit: "" });
+              setAddGoalSheet(false);
+            }} style={{ width: "100%", padding: "15px", borderRadius: 18, background: newGoal.label && newGoal.target ? "#000" : T.bg3, color: newGoal.label && newGoal.target ? "#fff" : T.label3, border: "none", fontWeight: 700, fontSize: 16, cursor: "pointer", marginTop: 4 }}>
+              Create Goal
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add expense sheet */}
+      {addExpSheet && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} onClick={() => { setAddExpSheet(false); setSelCat(null); setExpSearch(""); setNewExpAmt(""); }} />
+          <div style={{ position: "relative", background: T.bg2, borderRadius: "26px 26px 0 0", maxHeight: "88%", display: "flex", flexDirection: "column", animation: "popIn .3s cubic-bezier(.34,1.56,.64,1)" }}>
+            <div style={{ padding: "20px 20px 12px", borderBottom: `1px solid ${T.sep}` }}>
+              <div style={{ width: 40, height: 5, borderRadius: 99, background: T.bg3, margin: "0 auto 16px" }} />
+              <div style={{ fontWeight: 800, fontSize: 20, color: T.label, marginBottom: 12 }}>Add Expense</div>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 15 }}>🔍</span>
+                <input ref={searchRef} value={expSearch} onChange={e => { setExpSearch(e.target.value); setSelCat(null); }} placeholder="Search categories..."
+                  style={{ width: "100%", padding: "13px 13px 13px 42px", borderRadius: 14, border: `1.5px solid ${T.sep}`, background: T.bg3, color: T.label, fontSize: 15, fontFamily: "inherit", outline: "none" }} />
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "12px 20px" }}>
+              {!selCat ? (
+                expSearch.trim() ? (
+                  <div>
+                    {filteredCats.length === 0 && <div style={{ textAlign: "center", padding: "32px 0", color: T.label3, fontSize: 14 }}>No matches</div>}
+                    {filteredCats.map(cat => (
+                      <button key={cat.id} onClick={() => setSelCat(cat)}
+                        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 14px", borderRadius: 14, background: T.bg2, border: `1px solid ${T.sep}`, cursor: "pointer", marginBottom: 6, textAlign: "left" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 11, background: cat.col + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{cat.icon}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: T.label }}>{cat.label}</div>
+                          <div style={{ fontSize: 11, color: T.label3 }}>{cat.group}</div>
+                        </div>
+                        <span style={{ color: T.label3 }}>→</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  Object.entries(grouped).map(([group, cats]) => (
+                    <div key={group} style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: T.label3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8, paddingLeft: 4 }}>{group}</div>
+                      <div style={{ background: T.bg2, borderRadius: 18, overflow: "hidden", border: `1px solid ${T.sep}` }}>
+                        {cats.map((cat, j) => (
+                          <button key={cat.id} onClick={() => setSelCat(cat)}
+                            style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 14px", background: "transparent", border: "none", borderBottom: j < cats.length - 1 ? `1px solid ${T.sep}` : "none", cursor: "pointer", textAlign: "left" }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 10, background: cat.col + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{cat.icon}</div>
+                            <span style={{ fontWeight: 600, fontSize: 14, color: T.label, flex: 1 }}>{cat.label}</span>
+                            <span style={{ color: T.label3, fontSize: 12 }}>→</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : (
+                <div>
+                  <button onClick={() => setSelCat(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: RC.mind.s, fontWeight: 600, fontSize: 14, cursor: "pointer", marginBottom: 20, padding: 0 }}>← Back</button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
+                    <div style={{ width: 54, height: 54, borderRadius: 18, background: selCat.col + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{selCat.icon}</div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 20, color: T.label }}>{selCat.label}</div>
+                      <div style={{ fontSize: 13, color: T.label2 }}>{selCat.group}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: T.label3, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 8 }}>Monthly amount</div>
+                  <div style={{ position: "relative", marginBottom: 14 }}>
+                    <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 22, fontWeight: 700, color: selCat.col }}>₦</span>
+                    <input type="tel" inputMode="numeric" autoFocus value={newExpAmt} placeholder="0"
+                      onChange={e => { const r = e.target.value.replace(/\D/g, ""); setNewExpAmt(r ? parseInt(r).toLocaleString() : ""); }}
+                      style={{ width: "100%", padding: "14px 14px 14px 48px", borderRadius: 14, border: `1.5px solid ${newExpAmt ? selCat.col : T.sep}`, background: T.bg3, color: T.label, fontSize: 26, fontWeight: 800, fontFamily: "inherit", outline: "none" }} />
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
+                    {[5000, 10000, 15000, 20000, 30000, 50000].map(a => (
+                      <button key={a} onClick={() => setNewExpAmt(a.toLocaleString())}
+                        style={{ padding: "7px 14px", borderRadius: 99, border: `1.5px solid ${newExpAmt === a.toLocaleString() ? selCat.col : T.sep}`, background: newExpAmt === a.toLocaleString() ? selCat.col + "22" : "transparent", color: newExpAmt === a.toLocaleString() ? selCat.col : T.label2, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                        ₦{a.toLocaleString()}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => {
+                    if (!newExpAmt) return;
+                    setBudget(p => [...p, { id: "b" + Date.now(), catId: selCat.id, label: selCat.label, icon: selCat.icon, col: selCat.col, amt: parseInt(newExpAmt.replace(/,/g, "")) || 0 }]);
+                    setNewExpAmt(""); setSelCat(null); setExpSearch(""); setAddExpSheet(false);
+                  }} style={{ width: "100%", padding: "15px", borderRadius: 18, background: newExpAmt ? "#000" : T.bg3, color: newExpAmt ? "#fff" : T.label3, border: "none", fontWeight: 700, fontSize: 17, cursor: newExpAmt ? "pointer" : "default" }}>
+                    Add {selCat.label}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add income sheet */}
+      {addIncSheet && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.5)" }} onClick={() => { setAddIncSheet(false); setNewIncLabel(""); setNewIncAmt(""); }} />
+          <div style={{ position: "relative", background: T.bg2, borderRadius: "26px 26px 0 0", padding: "24px 24px 32px", animation: "popIn .3s cubic-bezier(.34,1.56,.64,1)", maxHeight: "80%", overflowY: "auto" }}>
+            <div style={{ width: 40, height: 5, borderRadius: 99, background: T.bg3, margin: "0 auto 20px" }} />
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.label, marginBottom: 18 }}>Add Income Source</div>
+            {[["Source name", "text", "e.g. Side hustle, Rental...", "label"], ["Monthly amount (₦)", "number", "0", "amt"]].map(([lbl, type, ph, key]) => (
+              <div key={key} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: T.label3, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600, marginBottom: 6 }}>{lbl}</div>
+                <input type={type} placeholder={ph} value={key === "label" ? newIncLabel : newIncAmt}
+                  onChange={e => { if (key === "label") setNewIncLabel(e.target.value); else { const r = e.target.value.replace(/\D/g, ""); setNewIncAmt(r ? parseInt(r).toLocaleString() : ""); } }}
+                  style={{ width: "100%", padding: "13px 14px", borderRadius: 12, border: `1.5px solid ${T.sep}`, background: T.bg3, color: T.label, fontSize: 16, fontFamily: "inherit", fontWeight: 600, outline: "none" }} />
+              </div>
+            ))}
+            <button onClick={() => {
+              if (!newIncLabel || !newIncAmt) return;
+              setIncomeSources(p => [...p, { id: "inc_" + Date.now(), label: newIncLabel, icon: "💵", amount: parseInt(newIncAmt.replace(/,/g, "")) || 0 }]);
+              setNewIncLabel(""); setNewIncAmt(""); setAddIncSheet(false);
+            }} style={{ width: "100%", padding: "15px", borderRadius: 18, background: newIncLabel && newIncAmt ? "#000" : T.bg3, color: newIncLabel && newIncAmt ? "#fff" : T.label3, border: "none", fontWeight: 700, fontSize: 16, cursor: "pointer", marginTop: 4 }}>
+              Add Income Source
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ROOT ────────────────────────────────────────────────────
+function Root() {
+  const [dark, setDark] = useState(false);
+  const toggle = useCallback(() => setDark(d => !d), []);
+  const T = dark ? DARK : LIGHT;
+  const [screen, setScreen] = useState("onboard");
+  const [profile, setProfile] = useState(null);
+  const [goals, setGoals] = useState(null);
+  const [budget, setBudget] = useState(null);
+
+  useEffect(() => {
+    document.body.style.background = dark ? "#000" : "#F2F2F7";
+  }, [dark]);
+
+  return (
+    <ThemeCtx.Provider value={{ dark, toggle, T }}>
+      <style>{`
+        @keyframes popIn{0%{transform:scale(.9);opacity:0}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}
+        *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+        button{font-family:inherit}
+        input{font-family:inherit}
+        ::-webkit-scrollbar{display:none}
+      `}</style>
+      <div style={{ height: "100%", color: T.label, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", position: "relative", overflow: "hidden", background: T.bg }}>
+        {screen === "onboard" && (
+          <Onboarding onComplete={(p, g, b) => { setProfile(p); setGoals(g); setBudget(b); setScreen("app"); }} />
+        )}
+        {screen === "app" && profile && goals && budget && (
+          <Dashboard profile={profile} goals={goals} budget={budget} />
+        )}
+      </div>
+    </ThemeCtx.Provider>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+
+</script>
+</body>
+</html>
